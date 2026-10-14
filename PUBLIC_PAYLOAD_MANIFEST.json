@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "classification": "PUBLIC_SAFE",
+  "files": [
+    ".github/workflows/public-safe-ci.yml",
+    "PUBLIC_PAYLOAD_MANIFEST.json",
+    "README.md",
+    "SECURITY_BOUNDARY.md",
+    "public_core.py",
+    "tests/test_public_core.py",
+    "tools/verify_public_payload.py"
+  ],
+  "policy": "ONLY_LISTED_FILES_MAY_BE_PUBLISHED"
+}
