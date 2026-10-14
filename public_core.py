@@ -102,3 +102,135 @@ def classify_work(*, execution_status: str, lease_age_seconds: int | None,
     if execution_status == "WAITING_REMOTE" and remote_status == "completed":
         return "RESUME_NEEDED"
     return "STALE_WORKER"
+
+
+OWNER_GATED_EXECUTION_STATES = {"NEED_DECISION", "READY_FOR_AUDITION", "BLOCKED"}
+
+
+def evaluate_finalizer_state(*, request: dict, task_state: dict, ownership_status: str) -> dict:
+    if request.get("schema") != "usw.public.finalizer_eval" or request.get("version") != 1:
+        raise PublicCoreError("finalizer request schema/version mismatch")
+
+    expected_revision = request.get("expected_state_revision")
+    if not isinstance(expected_revision, int) or expected_revision < 1:
+        raise PublicCoreError("invalid expected state revision")
+
+    expected_owner = request.get("expected_ownership_state", "ACTIVE")
+    if ownership_status != expected_owner:
+        return {"status": "REJECTED", "classification": "STALE_OWNERSHIP"}
+
+    if task_state.get("state_revision") != expected_revision:
+        return {"status": "REJECTED", "classification": "STALE_REVISION"}
+
+    execution_status = task_state.get("execution_status")
+    result_class = (task_state.get("last_result") or {}).get("classification")
+
+    if execution_status in OWNER_GATED_EXECUTION_STATES:
+        return {
+            "status": "REJECTED",
+            "classification": execution_status,
+            "owner_gate": True,
+        }
+
+    if execution_status == "WAITING_REMOTE" or result_class == "PENDING":
+        return {"status": "REJECTED", "classification": "QUALIFICATION_AMBIGUOUS"}
+
+    if result_class == "FAIL":
+        return {"status": "REJECTED", "classification": "QUALIFICATION_FAIL"}
+
+    if result_class not in {"PASS", "NONE"}:
+        return {"status": "REJECTED", "classification": "RESULT_STATE_INVALID"}
+
+    return {
+        "status": "ELIGIBLE",
+        "classification": "READY_TO_FINALIZE",
+        "next_stage": "READY_TO_FINALIZE",
+        "expected_revision": expected_revision,
+    }
+
+
+def _resume_identity(observation: dict) -> str:
+    return "|".join([
+        str(observation.get("source", "")),
+        str(observation.get("run_id", "")),
+        str(observation.get("sequence", "")),
+        str(observation.get("classification", "")),
+    ])
+
+
+def decide_auto_resume(*, task_state: dict, observation: dict, overlay: dict | None = None) -> dict:
+    overlay = overlay or {}
+
+    status = task_state.get("execution_status")
+    if status in OWNER_GATED_EXECUTION_STATES:
+        return {"decision": "NO_AUTO_RESTART", "reason": status, "owner_gate": True}
+
+    classification = observation.get("classification")
+    if classification not in {"PASS", "FAIL"}:
+        raise PublicCoreError("invalid observation classification")
+
+    seq = observation.get("sequence")
+    if not isinstance(seq, int) or seq < 0:
+        raise PublicCoreError("invalid observation sequence")
+
+    identity = _resume_identity(observation)
+    if overlay.get("last_identity") == identity:
+        return {"decision": "DUPLICATE_IGNORED", "identity": identity}
+
+    last_seq = overlay.get("last_sequence")
+    if isinstance(last_seq, int) and seq < last_seq:
+        return {"decision": "STALE_IGNORED", "identity": identity}
+
+    observed_revision = observation.get("state_revision")
+    current_revision = task_state.get("state_revision")
+    if (
+        isinstance(observed_revision, int)
+        and isinstance(current_revision, int)
+        and observed_revision < current_revision
+        and observation.get("run_id") != task_state.get("last_remote_builder_run_id")
+    ):
+        return {
+            "decision": "STALE_IGNORED",
+            "identity": identity,
+            "reason": "OLDER_REVISION",
+        }
+
+    return {
+        "decision": "APPLY_AND_RESUME",
+        "identity": identity,
+        "classification": classification,
+        "run_id": observation.get("run_id"),
+        "sequence": seq,
+        "next_execution_status": "WORKING",
+    }
+
+
+PUBLIC_JOB_SAFETY = {
+    "private_repo": False,
+    "external_auth": False,
+    "private_artifacts": False,
+    "proprietary_data": False,
+    "logs_public": True,
+}
+
+PUBLIC_JOB_WORKLOADS = {
+    "FINALIZER_STATE_EVAL",
+    "AUTO_RESUME_DECISION",
+    "GUI_COMPONENT_VALIDATE",
+}
+
+
+def validate_public_job_request(req: dict) -> None:
+    required = {"schema", "version", "request_id", "workload", "public_safety", "payload"}
+    if req.get("schema") != "usw.public_job_request" or req.get("version") != 1:
+        raise PublicCoreError("public job schema/version mismatch")
+    if set(req) != required:
+        raise PublicCoreError("public job fields mismatch")
+    if not isinstance(req.get("request_id"), str) or not req["request_id"] or len(req["request_id"]) > 96:
+        raise PublicCoreError("public job request id invalid")
+    if req.get("workload") not in PUBLIC_JOB_WORKLOADS:
+        raise PublicCoreError("public job workload not allowed")
+    if req.get("public_safety") != PUBLIC_JOB_SAFETY:
+        raise PublicCoreError("public safety facts are not explicit PASS")
+    if not isinstance(req.get("payload"), dict):
+        raise PublicCoreError("public job payload invalid")
