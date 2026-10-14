@@ -151,3 +151,123 @@ def validate_overlay(contract: dict, baseline: dict, binding: dict, base_dir: Pa
         "runtime_features_verified": sorted(features),
         "private_native_gate_still_required_for_release": True,
     }
+
+
+COMPONENT_STATUS = {
+    "DESIGN_CANDIDATE",
+    "IMPLEMENTATION_READY",
+    "RUNTIME_CANDIDATE",
+    "COMPONENT_CURRENT",
+}
+
+COMPONENT_BINDING = {
+    "PARAM_CONTINUOUS",
+    "PARAM_BIPOLAR",
+    "PARAM_STEPPED",
+    "PARAM_ENUM",
+    "PARAM_BOOL",
+    "PARAM_TEXT",
+    "TELEMETRY_SCALAR",
+    "TELEMETRY_VECTOR",
+    "TELEMETRY_HISTORY",
+    "TELEMETRY_AUDIO_DERIVED",
+    "STATE_ACTION",
+    "STATE_SELECTOR",
+    "STATIC_PRESENTATION",
+}
+
+COMPONENT_RENDERING = {
+    "VECTOR_STATIC",
+    "VECTOR_DYNAMIC",
+    "RASTER_ASSET",
+    "FILMSTRIP_ASSET",
+    "RUNTIME_DRAWN",
+    "TEXT_RUNTIME",
+    "TELEMETRY_RENDERED",
+}
+
+COMPONENT_UPDATE = {
+    "STATIC",
+    "EVENT_DRIVEN",
+    "PARAMETER_DRIVEN",
+    "UI_ANIMATION",
+    "METER_TELEMETRY",
+    "ANALYSIS_TELEMETRY",
+}
+
+COMPONENT_REQUIRED_FIELDS = {
+    "component_id",
+    "semantic_name",
+    "family",
+    "status",
+    "size_classes",
+    "supported_roles",
+    "binding_class",
+    "interaction_states",
+    "rendering_layers",
+    "logical_bounds",
+    "resize_policy",
+    "motion_update_class",
+    "assets",
+    "runtime_adapter",
+    "qa_fixtures",
+    "known_limits",
+}
+
+
+def validate_component_contract(payload: dict) -> dict:
+    need(isinstance(payload, dict), "COMPONENT_NOT_OBJECT")
+    missing = sorted(COMPONENT_REQUIRED_FIELDS - set(payload))
+    need(not missing, "MISSING_FIELDS:" + ",".join(missing))
+
+    need(isinstance(payload["component_id"], str) and payload["component_id"].strip(), "COMPONENT_ID_INVALID")
+    need(isinstance(payload["semantic_name"], str) and payload["semantic_name"].strip(), "SEMANTIC_NAME_INVALID")
+    need(isinstance(payload["family"], str) and payload["family"].strip(), "FAMILY_INVALID")
+    need(payload["status"] in COMPONENT_STATUS, "STATUS_INVALID")
+
+    sizes = payload["size_classes"]
+    need(isinstance(sizes, list) and sizes and all(isinstance(x, str) and x for x in sizes), "SIZE_CLASSES_INVALID")
+
+    roles = payload["supported_roles"]
+    need(isinstance(roles, list) and roles and all(isinstance(x, str) and x for x in roles), "SUPPORTED_ROLES_INVALID")
+
+    bindings = payload["binding_class"]
+    if isinstance(bindings, str):
+        bindings = [bindings]
+    need(isinstance(bindings, list) and bindings, "BINDING_CLASS_INVALID")
+    need(set(bindings).issubset(COMPONENT_BINDING), "BINDING_CLASS_UNSUPPORTED")
+
+    states = payload["interaction_states"]
+    need(isinstance(states, list) and states and all(isinstance(x, str) and x for x in states), "INTERACTION_STATES_INVALID")
+
+    layers = payload["rendering_layers"]
+    need(isinstance(layers, list) and layers, "RENDERING_LAYERS_INVALID")
+    for layer in layers:
+        need(isinstance(layer, dict), "RENDERING_LAYER_INVALID")
+        need(layer.get("class") in COMPONENT_RENDERING, "RENDERING_CLASS_UNSUPPORTED")
+
+    bounds = payload["logical_bounds"]
+    need(isinstance(bounds, dict), "LOGICAL_BOUNDS_INVALID")
+    for key in ("width", "height"):
+        need(isinstance(bounds.get(key), (int, float)) and bounds[key] > 0, f"LOGICAL_BOUNDS_{key.upper()}_INVALID")
+
+    need(isinstance(payload["resize_policy"], str) and payload["resize_policy"], "RESIZE_POLICY_INVALID")
+
+    updates = payload["motion_update_class"]
+    if isinstance(updates, str):
+        updates = [updates]
+    need(isinstance(updates, list) and updates, "MOTION_UPDATE_CLASS_INVALID")
+    need(set(updates).issubset(COMPONENT_UPDATE), "MOTION_UPDATE_CLASS_UNSUPPORTED")
+
+    need(isinstance(payload["assets"], list), "ASSETS_INVALID")
+    need(isinstance(payload["runtime_adapter"], str) and payload["runtime_adapter"].strip(), "RUNTIME_ADAPTER_INVALID")
+    need(isinstance(payload["qa_fixtures"], list) and payload["qa_fixtures"], "QA_FIXTURES_INVALID")
+    need(isinstance(payload["known_limits"], list), "KNOWN_LIMITS_INVALID")
+
+    return {
+        "status": "PASS",
+        "component_id": payload["component_id"],
+        "binding_classes": bindings,
+        "rendering_classes": [x["class"] for x in layers],
+        "update_classes": updates,
+    }
