@@ -6,7 +6,9 @@
     "PUBLIC_PAYLOAD_MANIFEST.json",
     "README.md",
     "SECURITY_BOUNDARY.md",
+    "gui_preflight_core.py",
     "public_core.py",
+    "tests/test_gui_preflight_core.py",
     "tests/test_public_core.py",
     "tools/verify_public_payload.py"
   ],
