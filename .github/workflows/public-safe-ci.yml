@@ -1,14 +1,18 @@
 name: USW Public Safe CI
+run-name: USW Public Safe CI
 
 on:
   push:
     branches: [main]
   pull_request:
     branches: [main]
+  issues:
+    types: [opened]
   workflow_dispatch:
 
 permissions:
   contents: read
+  issues: read
 
 jobs:
   public-safe:

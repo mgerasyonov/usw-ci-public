@@ -4,7 +4,7 @@ from pathlib import Path
 import tempfile
 import unittest
 
-from gui_preflight_core import GuiPreflightError, validate_overlay
+from gui_preflight_core import GuiPreflightError, validate_overlay, validate_component_contract
 
 
 class GuiPreflightCoreTests(unittest.TestCase):
@@ -99,6 +99,54 @@ class GuiPreflightCoreTests(unittest.TestCase):
 
         with self.assertRaises(GuiPreflightError):
             validate_overlay(contract, baseline, binding, root)
+
+
+    def test_component_contract_schema_passes(self):
+        out = validate_component_contract({
+            "component_id": "KnobMedium",
+            "semantic_name": "Medium Knob",
+            "family": "ContinuousControls",
+            "status": "IMPLEMENTATION_READY",
+            "size_classes": ["M"],
+            "supported_roles": ["parameter"],
+            "binding_class": ["PARAM_CONTINUOUS"],
+            "interaction_states": ["default", "hover", "active", "disabled"],
+            "rendering_layers": [
+                {"class": "VECTOR_STATIC"},
+                {"class": "VECTOR_DYNAMIC"},
+                {"class": "TEXT_RUNTIME"},
+            ],
+            "logical_bounds": {"width": 64, "height": 64},
+            "resize_policy": "scale_with_component",
+            "motion_update_class": ["PARAMETER_DRIVEN"],
+            "assets": [],
+            "runtime_adapter": "qualified-generic-runtime-control",
+            "qa_fixtures": ["min", "mid", "max", "disabled"],
+            "known_limits": [],
+        })
+        self.assertEqual(out["status"], "PASS")
+
+    def test_component_contract_unknown_binding_fails(self):
+        item = {
+            "component_id": "KnobMedium",
+            "semantic_name": "Medium Knob",
+            "family": "ContinuousControls",
+            "status": "IMPLEMENTATION_READY",
+            "size_classes": ["M"],
+            "supported_roles": ["parameter"],
+            "binding_class": ["UNKNOWN_BINDING"],
+            "interaction_states": ["default"],
+            "rendering_layers": [{"class": "VECTOR_STATIC"}],
+            "logical_bounds": {"width": 64, "height": 64},
+            "resize_policy": "scale_with_component",
+            "motion_update_class": ["PARAMETER_DRIVEN"],
+            "assets": [],
+            "runtime_adapter": "qualified-generic-runtime-control",
+            "qa_fixtures": ["mid"],
+            "known_limits": [],
+        }
+        with self.assertRaises(GuiPreflightError):
+            validate_component_contract(item)
 
 
 if __name__ == "__main__":
