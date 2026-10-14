@@ -49,6 +49,7 @@ class GuiPreflightCoreTests(unittest.TestCase):
         baseline = {
             "schema": 1,
             "dimensions": {
+                "width": 1280, "height": 720,
                 "min_width": 800, "min_height": 450,
                 "max_width": 1920, "max_height": 1080
             },
