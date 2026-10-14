@@ -1,5 +1,5 @@
 name: USW Public Safe CI
-run-name: USW Public Safe CI
+run-name: ${{ github.event_name == 'issues' && format('USW Public Job #{0}', github.event.issue.number) || 'USW Public Safe CI' }}
 
 on:
   push:
