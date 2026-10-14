@@ -1,0 +1,25 @@
+name: USW Public Safe CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  public-safe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Validate public payload
+        run: python tools/verify_public_payload.py
+      - name: Run generic invariant regressions
+        run: python -m unittest discover -s tests -v
